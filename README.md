@@ -2,17 +2,14 @@
 
 # target_engine
 
-Working in progress on target_engine
+Work in progress on target_engine project
 
 ### Requirements 
 
 - [PySpark](https://github.com/apache/spark)
 
-
-## Configuration
-
+### Configuration
 
 
-##
 
 
