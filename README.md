@@ -6,8 +6,7 @@ Working in progress on target_engine
 
 ### Requirements 
 
-- [PySpark] (https://github.com/apache/spark)
-
+- [PySpark](https://github.com/apache/spark)
 
 
 ## Configuration
