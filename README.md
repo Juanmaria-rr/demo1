@@ -2,8 +2,18 @@
 
 # target_engine
 
-Some text about repository architecture
+Working in progress on target_engine
 
-## Other text regarding next files to be added
+### Requirements 
+
+- [PySpark] (https://github.com/apache/spark)
+
+
+
+## Configuration
+
+
+
+##
 
 
