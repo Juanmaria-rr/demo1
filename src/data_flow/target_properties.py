@@ -1,5 +1,4 @@
 
-
 def biotype_query(target, queryset):
     target_biotype = (target
     .select("id", "biotype")
