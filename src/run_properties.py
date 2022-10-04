@@ -27,9 +27,9 @@ interact_db=spark.read.parquet(interact_path)
 molecule_path= "/Users/juanr/Desktop/Target_Engine/data_download/Parquet/drug/molecule/"
 molecule=spark.read.parquet(molecule_path)
 
-biotype = biotype_query(target, queryset) #### [id,biotype]
-mblocation = target_location(target,biotype) 
-drug = drug_query(target, mblocation)
+biotype = biotype_query(target, queryset)
+location = target_location(target,biotype) 
+drug = drug_query(target, location)
 drug_partners = partner_drugs (molecule,interact_db,drug)
 
 ### Tidy the columns left.
