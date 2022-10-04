@@ -32,4 +32,6 @@ mblocation = target_location(target,biotype)
 drug = drug_query(target, mblocation)
 drug_partners = partner_drugs (molecule,interact_db,drug)
 
+### Tidy the columns left.
+
 
