@@ -23,7 +23,7 @@ target_path = "/Users/juanr/Desktop/Target_Engine/data_download/Parquet/target/t
 target = spark.read.parquet(target_path)
 
 biotype = biotype_query(target, queryset) #### [id,biotype]
-mblocation = target_location(target,biotype,collect_termsl) 
+mblocation = target_location(target,biotype) 
 drug = drug_query(target, mblocation)
 
 ### output.write.csv()
