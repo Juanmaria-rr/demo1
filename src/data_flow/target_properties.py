@@ -31,12 +31,12 @@ def drug_query(target, queryset):
         target
         # Exploding tractability:
         .select(
-    F.col("id").alias("target_id"),
-    F.explode_outer("tractability").alias("new_struct")
-    )
-    .select("target_id", F.col("new_struct.*"))
-    # Filter for AB modality, and approval
-    .filter(
+        F.col("id").alias("target_id"),
+        F.explode_outer("tractability").alias("new_struct")
+        )
+        .select("target_id", F.col("new_struct.*"))
+        # Filter for AB modality, and approval
+        .filter(
         (F.col("modality") == "AB")
         & (F.col("id") == "Approved Drug")
         & (F.col("value") == "True")
@@ -55,7 +55,7 @@ def partner_drugs (molecule,interact_db,queryset):
     partner_drugs=(interact_db
     .filter(interact_db.sourceDatabase =='intact').select('sourceDatabase', 'targetA','targetB','scoring')
     .filter(partners.scoring > '0.42')
-    .join(queryset ,queryset.targetid ==  partners_cutoff.targetA,"right")
+    .join(queryset ,queryset.target_id ==  partners_cutoff.targetA,"right")
     .dropDuplicates(['id',"targetA","targetB"])
     .join(tar_group ,F.col('targetB') == tar_group.col,"left")
     )

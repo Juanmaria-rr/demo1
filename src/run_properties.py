@@ -30,6 +30,6 @@ molecule=spark.read.parquet(molecule_path)
 biotype = biotype_query(target, queryset) #### [id,biotype]
 mblocation = target_location(target,biotype) 
 drug = drug_query(target, mblocation)
-drug_partners = partner_drugs (molecule,interact_db,queryset)
+drug_partners = partner_drugs (molecule,interact_db,drug)
 
 
