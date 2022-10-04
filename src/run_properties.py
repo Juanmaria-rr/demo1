@@ -6,6 +6,7 @@ import pyspark.sql.functions as F
 from pyspark.sql.types import StructType, StructField, StringType
 
 from VScode.target_engine.target.properties import biotype_query, drug_query, target_location
+from target_engine_repo.src.data_flow.target_properties import partner_drugs
 
 spark = (
     SparkSession.builder.master("local[*]")
@@ -18,22 +19,17 @@ spark = (
 ### a random sample of target dataset
 queryset=target.select('id').withColumnRenamed('id','targetid').sample(False, 0.3,seed=10).limit(10000)
 
-### Define target dataset
+### Define required dataset
 target_path = "/Users/juanr/Desktop/Target_Engine/data_download/Parquet/target/targets/"
 target = spark.read.parquet(target_path)
+interact_path="/Users/juanr/Desktop/Target_Engine/data_download/Parquet/interaction/"
+interact_db=spark.read.parquet(interact_path)
+molecule_path= "/Users/juanr/Desktop/Target_Engine/data_download/Parquet/drug/molecule/"
+molecule=spark.read.parquet(molecule_path)
 
 biotype = biotype_query(target, queryset) #### [id,biotype]
 mblocation = target_location(target,biotype) 
 drug = drug_query(target, mblocation)
-
-### output.write.csv()
-
-## From questions to code
-## Common: Load target and query datasets (datasets with name of targets).
-
-### target_path = "/Users/juanr/Desktop/Target_Engine/data_download/Parquet/target/targets/"
-### queryset_path = "/Users/juanr/Desktop/Target_Engine/queryset.csv"
-### target = spark.read.parquet(target_path)
-### queryset = spark.read.option("header", True).csv(queryset_path)
+drug_partners = partner_drugs (molecule,interact_db,queryset)
 
 

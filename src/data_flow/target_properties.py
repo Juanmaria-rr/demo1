@@ -47,5 +47,16 @@ def drug_query(target, queryset):
     # Write to output:
     return tractab ### AND JOIN COLUMN TO DATASET 
 
-
-    
+def partner_drugs (molecule,interact_db,queryset): 
+    tar_group=(molecule
+    .select(F.col('id'), F.explode(F.col('linkedTargets.rows')))
+    .groupBy('col').agg(F.collect_list('id').alias('CHEMBL'))                                             
+    )
+    partner_drugs=(interact_db
+    .filter(interact_db.sourceDatabase =='intact').select('sourceDatabase', 'targetA','targetB','scoring')
+    .filter(partners.scoring > '0.42')
+    .join(queryset ,queryset.targetid ==  partners_cutoff.targetA,"right")
+    .dropDuplicates(['id',"targetA","targetB"])
+    .join(tar_group ,F.col('targetB') == tar_group.col,"left")
+    )
+    return partner_drugs 
