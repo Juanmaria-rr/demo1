@@ -6,7 +6,7 @@ import pyspark.sql.functions as F
 from pyspark.sql.types import StructType, StructField, StringType
 
 from VScode.target_engine.target.properties import biotype_query, drug_query, target_location
-from target_engine_repo.src.data_flow.target_properties import partner_drugs
+from target_engine_repo.src.data_flow.target_properties import chemical_probes, partner_drugs
 
 spark = (
     SparkSession.builder.master("local[*]")
@@ -31,6 +31,9 @@ biotype = biotype_query(target, queryset)
 location = target_location(target,biotype) 
 drug = drug_query(target, location)
 drug_partners = partner_drugs (molecule,interact_db,drug)
+chemi_probes= chemical_probes (target,drug_partners)
+
+
 
 ### Tidy the columns left.
 

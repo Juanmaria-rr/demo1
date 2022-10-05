@@ -60,3 +60,19 @@ def partner_drugs (molecule,interact_db,queryset):
     .join(tar_group ,F.col('targetB') == tar_group.col,"left")
     )
     return partner_drugs 
+
+def chemical_probes (target,queryset): 
+    chprob=(target
+    .select(F.col('id').alias('chemid'),F.explode(F.col('chemicalProbes')))
+    .filter(F.col('col.isHighQuality') == 'true')
+    .select(F.col('chemid'),'col.*')
+    .select(F.col('*'),F.explode(F.col('urls')))
+    .select(F.col('*'),'col.*')
+    .select('chemid','mechanismOfAction')
+    .groupBy('chemid','mechanismOfAction').agg(F.count('mechanismOfAction').alias('counts'))
+    .select('chemid', F.concat_ws(':',F.col('mechanismOfAction'),F.col('counts')).alias('counted'))
+    .where("counted!='0' ")
+    .groupBy('chemid').agg(F.collect_list('counted').alias('ChemicalProbes_HC'))
+    .join(queryset, F.col('chemid') == queryset.target_id, 'right')
+    ) ###  Make the joining left
+    return chprob 
