@@ -74,7 +74,7 @@ def chemical_probes (target,queryset):
     .where("counted!='0' ")
     .groupBy('chemid').agg(F.collect_list('counted').alias('ChemicalProbes_HC'))
     .join(queryset, F.col('chemid') == queryset.target_id, 'right')
-    ) ###  Make the joining left
+    ) 
     return chprob 
 
 def mousemod_class (mouse,queryset): 
