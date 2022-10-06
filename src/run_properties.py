@@ -35,9 +35,19 @@ location = target_location(target,biotype)
 drug = drug_query(target, location)
 drug_partners = partner_drugs (molecule,interact_db,drug)
 chemi_probes= chemical_probes (target,drug_partners)
-mouse_models= mousemod_class (mouse,queryset)
+mouse_models= mousemod_class (mouse,chemi_probes)
 
+info=(mouse_models
+    .select(
+        'targetid',
+        'biotype',
+        'location',
+        'Approved_drugType',
+        'N_partner_drug',
+        'ChemicalProbes_HC',
+        'Nr_mouse_models',
+        'Different_PhenoClasses')
+) 
 
-### Tidy the columns left.
 
 
