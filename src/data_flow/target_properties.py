@@ -8,8 +8,7 @@ def biotype_query(target, queryset):
     return target_biotype #### [id,biotype]
 
 def target_location (target, queryset):
-    column= (
-    target
+    column= (target
     .select('id',
         F.col('subcellularLocations'),
         F.explode_outer('subcellularLocations')
@@ -24,8 +23,7 @@ def target_location (target, queryset):
     return column ### AND JOIN TO COLUMN.
 
 def drug_query(target, queryset):
-    tractab = (
-    target
+    tractab = (target
     .select(
         F.col("id").alias("target_id"),
         F.explode_outer("tractability").alias("new_struct")
