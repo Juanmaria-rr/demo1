@@ -1,3 +1,6 @@
+from pyspark import F
+
+
 def biotype_query(target, queryset):
     target_biotype = (target
     .select("id", "biotype")

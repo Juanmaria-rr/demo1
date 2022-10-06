@@ -40,14 +40,14 @@ mouse_models= mousemod_class (mouse,chemi_probes)
 #Selection of relevant columns
 info=(mouse_models
     .select(
-        'targetid',
-        'biotype',
-        'location',
-        'Approved_drugType',
-        'N_partner_drug',
-        'ChemicalProbes_HC',
-        'Nr_mouse_models',
-        'Different_PhenoClasses')
+        'targetid', 
+        'biotype', ## description
+        'location', ## description
+        'Approved_drugType', ## Any type of drug 'Approved' for the target
+        'N_partner_drug', ## Number of partners with at least 1 drug
+        'ChemicalProbes_HC', ## Type and number of High Confidence chemical probes 
+        'Nr_mouse_models', ## Number of mice models using containing the target
+        'Different_PhenoClasses') ## Distinct classes of mice models phenotypes 
 ) 
 
 
