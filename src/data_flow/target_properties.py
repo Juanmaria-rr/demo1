@@ -76,3 +76,13 @@ def chemical_probes (target,queryset):
     .join(queryset, F.col('chemid') == queryset.target_id, 'right')
     ) ###  Make the joining left
     return chprob 
+
+def mousemod_class (mouse,queryset): 
+
+    moclass=(mouse
+    .select(F.col('targetFromSourceId'),F.explode(F.col('modelPhenotypeClasses')).alias('classes'),F.col('classes.label'))
+    .select(F.col('targetFromSourceId').alias('target_id'), F.col('classes.label'))
+    .groupBy('target_id').agg(F.count('label'),F.collect_list('label'))
+    .join(queryset, queryset.target_id == F.col('target'),'right')
+    )
+    return moclass 
