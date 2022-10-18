@@ -25,21 +25,24 @@ def target_location (target, queryset):
     )
     return column ### AND JOIN TO COLUMN.
 
-def drug_query(target, queryset):
-    tractab = (target
-    .select(
-        F.col("id").alias("target_id"),
-        F.explode_outer("tractability").alias("new_struct")
-        )
-    .select("target_id", F.col("new_struct.*"))
-    .filter(
-        (F.col("id") == "Approved Drug")
-         & (F.col("value") == "True")
+def drug_query(molecule,molecule_mec, queryset):
+    drug_approved=(molecule
+    .select('id','isApproved','linkedTargets')
     )
-    .groupBy('target_id').agg(F.collect_list('modality').alias('Approved_drugType'))
-    .join(queryset, queryset.targetid == F.col('target_id'),'right')
+    drug_action=(molecule_mec
+    .select('actionType', F.explode_outer(F.col('chemblIds')).alias('chembl')))
+
+    appdrug_targets=(drug_approved
+    .join(drug_action, drug_action.chembl == drug_approved.id, 'left')
+    .withColumn('targets',F.explode_outer(F.col('linkedTargets.rows')))
+    .filter(F.col('isApproved')=='true')
+    .select('targets','chembl','actionType')
+    .dropDuplicates(['targets','chembl'])
+    .groupBy('targets')
+    .agg(F.collect_list('chembl'),F.collect_list('actionType'))
+    .join(queryset, queryset.targetid == F.col('targets'),'right')
     )
-    return tractab 
+    return appdrug_targets 
 
 def partner_drugs (molecule,interact_db,queryset): 
     tar_group=(molecule
@@ -117,3 +120,30 @@ def mousemod_class (mouse,chemi_probes):
     .join(chemi_probes, chemi_probes.targetid == F.col('target_id_'),'right')
     )
     return moclass 
+
+def constraint (target,queryset):
+
+    loftolerance=(target
+    .select(
+        F.col('id'),
+        F.explode('constraint'))
+    .select(
+        F.col('id'),
+        F.col('col.*'))
+    .filter(
+        F.col('constraintType')== 'lof')
+    .withColumn(
+        "cal_score", (F.col("upperRank") - 9456) / 19196)
+    .withColumn(
+        'selection', F.when(F.col('cal_score') < (-0.1), str('lofIntolerant')))
+    .withColumn(
+        'selection', F.when(F.col('cal_score').between(-1,-0.1),str('LOFintolerant'))
+    .when(F.col('cal_score').between(-0.0999999,0.0999999),str('Neutral'))
+    .when(F.col('cal_score').between(0.1,1),str('LOFtolerant')))
+## falta hacer el join con el queryset de targets para darle el score de seleccion  
+    .select('id','cal_score', 'selection', 'constraintType')
+    .join(queryset, queryset.targetid == F.col('id'), 'right')
+    )
+    return loftolerance
+
+    
