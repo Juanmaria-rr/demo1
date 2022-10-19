@@ -11,17 +11,23 @@ def biotype_query(target, queryset):
     return target_biotype #### [id,biotype]
 
 def target_location (target, queryset):
+    membrane_terms=(hierarchy
+    .filter(F.col('Name') == 'Membrane')
+    .select(hierarchy.Search).rdd.flatMap(lambda x: x).collect()
+    )
+    ### 
     column= (target
     .select('id',
         F.col('subcellularLocations'),
         F.explode_outer('subcellularLocations')
     )
     .select('id',
-        F.col('col.location')
+        F.col('col.*')
     )
-    .groupBy('id')
-    .agg(F.collect_list('location').alias('location'))
-    .join(queryset,queryset.targetid == F.col('id'),'right')
+    .withColumn('isinMb', F.col('termSL').isin(membrane_terms))
+    .withColumn('IsinMembrane', F.when(F.col('isinMb') == 'true', 'Yes')
+    .when(F.col('isinMb') == 'false', 'No'))
+    .select('id','IsinMembrane')
     )
     return column ### AND JOIN TO COLUMN.
 
