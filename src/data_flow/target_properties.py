@@ -10,7 +10,7 @@ def biotype_query(target, queryset):
     )
     return target_biotype #### [id,biotype]
 
-def target_location (target, queryset):
+def target_membrane (target, queryset):
     membrane_terms=(hierarchy
     .filter(F.col('Name') == 'Membrane')
     .select(hierarchy.Search).rdd.flatMap(lambda x: x).collect()
@@ -146,7 +146,7 @@ def constraint (target,queryset):
         'selection', F.when(F.col('cal_score').between(-1,-0.1),str('LOFintolerant'))
     .when(F.col('cal_score').between(-0.0999999,0.0999999),str('Neutral'))
     .when(F.col('cal_score').between(0.1,1),str('LOFtolerant')))
-## falta hacer el join con el queryset de targets para darle el score de seleccion  
+## JOIN with Queryset
     .select('id','cal_score', 'selection', 'constraintType')
     .join(queryset, queryset.targetid == F.col('id'), 'right')
     )

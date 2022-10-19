@@ -6,7 +6,7 @@ import pyspark.sql.functions as F
 from pyspark.sql.types import StructType, StructField, StringType
 
 from VScode.target_engine.target.properties import biotype_query, drug_query, target_location
-from target_engine_repo.src.data_flow.target_properties import chemical_probes, mousemod_class, partner_drugs
+from target_engine_repo.src.data_flow.target_properties import chemical_probes, constraint, mousemod_class, partner_drugs, target_membrane
 
 spark = (
     SparkSession.builder.master("local[*]")
@@ -31,14 +31,15 @@ queryset=target.select('id').withColumnRenamed('id','targetid').sample(False, 0.
 
 ## Concatenated functions
 biotype = biotype_query(target, queryset)
-location = target_location(target,biotype) 
+location = target_membrane(target,biotype) 
 drug = drug_query(target, location)
 drug_partners = partner_drugs (molecule,interact_db,drug)
 chemi_probes= chemical_probes (target,drug_partners)
 mouse_models= mousemod_class (mouse,chemi_probes)
+target_constraint = constraint (target,queryset)
 
 #Selection of relevant columns
-info=(mouse_models
+info=(target_constraint
     .select(
         'targetid', 
         'biotype', ## description
@@ -47,8 +48,9 @@ info=(mouse_models
         'N_partner_drug', ## Number of partners with at least 1 drug
         'ChemicalProbes_HC', ## Type and number of High Confidence chemical probes 
         'Nr_mouse_models', ## Number of mice models using containing the target
-        'Different_PhenoClasses') ## Distinct classes of mice models phenotypes 
-) 
+        'Different_PhenoClasses' ## Distinct classes of mice models phenotypes
+        'Selection' ##Classification of constraint towards Loss of function 
+    ))
 
 
 
