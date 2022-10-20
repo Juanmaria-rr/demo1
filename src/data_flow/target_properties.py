@@ -3,10 +3,10 @@ from pyspark import F
 
 def biotype_query(target, queryset):
     target_biotype = (target
-    .select("id", "biotype")
-    .join(queryset, target.id == queryset.targetid, "right"
+    .select(
+        F.col("id").alias('id_biotype'), "biotype","approvedSymbol")
+    .join(queryset, F.col('id_biotype') == queryset.targetid, "right"
     )
-    .select("targetid", "biotype")
     )
     return target_biotype #### [id,biotype]
 
@@ -15,37 +15,44 @@ def target_membrane (target, queryset):
     .filter(F.col('Name') == 'Membrane')
     .select(hierarchy.Search).rdd.flatMap(lambda x: x).collect()
     )
+    list_mb=membrane_terms
+    list_mb=list_mb[0].split(",")
     ### 
     column= (target
-    .select('id',
+    .select(
+        F.col('id').alias('loc_id'),
         F.col('subcellularLocations'),
-        F.explode_outer('subcellularLocations')
+        F.explode_outer('subcellularLocations.termSL').alias('termSL')
     )
-    .select('id',
-        F.col('col.*')
-    )
-    .withColumn('isinMb', F.col('termSL').isin(membrane_terms))
+    .withColumn('isinMb', F.col('termSL').isin(list_mb))
     .withColumn('IsinMembrane', F.when(F.col('isinMb') == 'true', 'Yes')
     .when(F.col('isinMb') == 'false', 'No'))
-    .select('id','IsinMembrane')
+    .filter(F.col('IsinMembrane')=='Yes')
+    .dropDuplicates(['loc_id','IsinMembrane'])
+    .select('loc_id','IsinMembrane')
+    ### falta el join
+    .join(queryset, F.col('loc_id') == queryset.targetid, "right")
     )
     return column ### AND JOIN TO COLUMN.
 
 def drug_query(molecule,molecule_mec, queryset):
     drug_approved=(molecule
-    .select('id','isApproved','linkedTargets')
+    .select(
+        F.col('id').alias('drug_id'),
+        'isApproved',
+        'linkedTargets')
     )
     drug_action=(molecule_mec
     .select('actionType', F.explode_outer(F.col('chemblIds')).alias('chembl')))
 
     appdrug_targets=(drug_approved
-    .join(drug_action, drug_action.chembl == drug_approved.id, 'left')
+    .join(drug_action, drug_action.chembl == drug_approved.drug_id, 'left')
     .withColumn('targets',F.explode_outer(F.col('linkedTargets.rows')))
     .filter(F.col('isApproved')=='true')
     .select('targets','chembl','actionType')
     .dropDuplicates(['targets','chembl'])
     .groupBy('targets')
-    .agg(F.collect_list('chembl'),F.collect_list('actionType'))
+    .agg(F.collect_list('chembl').alias('App_drug_ChEMBL'),F.collect_list('actionType').alias('App_drug_actionType'))
     .join(queryset, queryset.targetid == F.col('targets'),'right')
     )
     return appdrug_targets 
@@ -151,5 +158,3 @@ def constraint (target,queryset):
     .join(queryset, queryset.targetid == F.col('id'), 'right')
     )
     return loftolerance
-
-    
