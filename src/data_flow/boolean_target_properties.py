@@ -1,40 +1,52 @@
 from pyspark import F
 
+### Still need the priotization of HPA main terms and predicted. 
 
 def biotype_query(target, queryset):
     target_biotype = (target
-    .select(
-        F.col("id").alias('id_biotype'), "biotype","approvedSymbol")
-    .join(queryset, F.col('id_biotype') == queryset.targetid, "right"
-    )
+    .select("id", "biotype")
+
+    .dropDuplicates(['id','biotype'])
+    .join(queryset, target.id == queryset.targetid, "right")
+    .select("targetid", "biotype")
+    .withColumn('Nr_biotype',
+    F.when (F.col('biotype')=='protein_coding',1)
+    .otherwise(0))
     )
     return target_biotype #### [id,biotype]
 
-def target_membrane (target, queryset):
-    membrane_terms=(hierarchy
-    .filter(F.col('Name') == 'Membrane')
-    .select(hierarchy.Search).rdd.flatMap(lambda x: x).collect()
+def target_membrane(target, queryset):
+    
+    membrane_terms=(parent_child_cousins_2
+    .filter(F.col('Name') == 'Cell membrane')
+    .select(parent_child_cousins_2.toSearch).rdd.flatMap(lambda x: x).collect()[0]
     )
-    list_mb=membrane_terms
-    list_mb=list_mb[0].split(",")
-    ### 
+    ###
+    ###
+    
     column= (target
     .select(
         F.col('id').alias('loc_id'),
         F.col('subcellularLocations'),
         F.explode_outer('subcellularLocations.termSL').alias('termSL')
     )
-    .withColumn('isinMb', F.col('termSL').isin(list_mb))
+    .withColumn('isinMb', F.col('termSL').isin(membrane_terms))
     .withColumn('IsinMembrane', F.when(F.col('isinMb') == 'true', 'Yes')
     .when(F.col('isinMb') == 'false', 'No'))
     .filter(F.col('IsinMembrane')=='Yes')
     .dropDuplicates(['loc_id','IsinMembrane'])
     .select('loc_id','IsinMembrane')
-    ### falta el join
+    .withColumn('Nr_mb',
+    F.when (F.col('IsinMembrane')=='Yes',F.lit(1))
+    .when(F.col('IsinMembrane') == 'No',F.lit(0))
+    .otherwise(None))
     .join(queryset, F.col('loc_id') == queryset.targetid, "right")
+    #### conversion Membrane = 1
+  
     )
     return column ### AND JOIN TO COLUMN.
 
+#### 
 def drug_query(molecule,molecule_mec, queryset):
     drug_approved=(molecule
     .select(
@@ -50,45 +62,21 @@ def drug_query(molecule,molecule_mec, queryset):
     .withColumn('targets',F.explode_outer(F.col('linkedTargets.rows')))
     .filter(F.col('isApproved')=='true')
     .select('targets','chembl','actionType')
+
     .dropDuplicates(['targets','chembl'])
     .groupBy('targets')
     .agg(F.collect_list('chembl').alias('App_drug_ChEMBL'),F.collect_list('actionType').alias('App_drug_actionType'))
+
+    ### We add a new columns with Yes because all of them have a drug
+    .withColumn('Drug',F.lit('Yes'))
+    .withColumn('Nr_drug',
+    F.when(F.col('Drug') !="",F.lit(1))
+    .otherwise(None))
     .join(queryset, queryset.targetid == F.col('targets'),'right')
     )
+    ### We put Yes/No in a new column 'boolean_drug' using all
+    ## Basicaly we put No in the null values 
     return appdrug_targets 
-
-def partner_drugs (molecule,interact_db,queryset): 
-    tar_group=(molecule
-    .select(
-        F.col('id').alias('CHEMBL'), 
-        F.explode(F.col('linkedTargets.rows')).alias('target'))
-    .groupBy('target')
-    .agg(
-        F.collect_list('CHEMBL').alias('CHEMBL_list'),
-        F.count('CHEMBL').alias('N_CHEMBL'))                                            
-    )
-
-    cnt_cond = lambda cond: F.sum(F.when(cond, 1).otherwise(0))
-    ## Function to convert any number under condition to 1
-    partner_drugs=(interact_db
-    .filter(
-        F.col('sourceDatabase') =='intact')
-    .select(
-        'sourceDatabase', 
-        'targetA',
-        'targetB',
-        'scoring')
-    .filter(
-        F.col('scoring') > '0.42')
-    .dropDuplicates(
-        ["targetA","targetB"])
-    .join(tar_group ,F.col('targetB') == tar_group.target,"left")
-    .groupBy('targetA')
-    .agg(
-        cnt_cond(F.col('N_CHEMBL') > 0).alias('N_partner_drug'))
-    .join(queryset ,queryset.targetid ==  F.col('targetA'),"right")    
-    )
-    return partner_drugs
 
 def chemical_probes (target,queryset): 
     chprob=(target
@@ -112,27 +100,18 @@ def chemical_probes (target,queryset):
     .groupBy('chemid')
     .agg(
         F.collect_list('counted').alias('ChemicalProbes_HC'))
+    ## Make a column only for tag 'Yes'
+    .withColumn('Chprob', F.lit('Yes'))
+    .withColumn('Nr_chprob',
+    F.when(F.col('Chprob') !="",F.lit(1))
+    .otherwise(None))
     .join(queryset, F.col('chemid') == queryset.targetid, 'right')
-    ) 
-    return chprob 
-
-def mousemod_class (mouse,chemi_probes): 
-
-    moclass=(mouse
-    .select(
-        F.col('targetFromSourceId'),
-        F.explode(F.col('modelPhenotypeClasses')).alias('classes'),
-        F.col('classes.label'))
-    .select(
-        F.col('targetFromSourceId').alias('target_id_'), 
-        F.col('classes.label'))
-    .groupBy('target_id_')
-    .agg(
-        F.count('label').alias('Nr_mouse_models'),
-        F.collect_set('label').alias('Different_PhenoClasses'))
-    .join(chemi_probes, chemi_probes.targetid == F.col('target_id_'),'right')
+    ## Tag those with something different to '' as No.
     )
-    return moclass 
+    return chprob
+
+
+#####
 
 def constraint (target,queryset):
 
@@ -148,11 +127,35 @@ def constraint (target,queryset):
     .withColumn(
         "cal_score", (F.col("upperRank") - 9456) / 19196)
     .withColumn(
-        'selection', F.when(F.col('cal_score') < (-0.1), str('LofIntolerant'))
-    .when(F.col('cal_score').between(-0.0999999,0.0999999),str('Neutral'))
-    .when(F.col('cal_score') > (0.1),str('LofTolerant')))
-## JOIN with Queryset
+        'selection', F.when(F.col('cal_score') < (-0.1), str('-1'))
+    .when(F.col('cal_score').between(-0.0999999,0.0999999),str('0'))
+    .when(F.col('cal_score') > (0.1),str('1')))
+    ## JOIN with Queryset
     .select('id','cal_score', 'selection', 'constraintType')
     .join(queryset, queryset.targetid == F.col('id'), 'right')
     )
     return loftolerance
+
+
+##### 
+
+def mousemod_class (mouse,chemi_probes): 
+    moclass=(mouse
+    .select(
+        F.col('targetFromSourceId'),
+        F.explode(F.col('modelPhenotypeClasses')).alias('classes'),
+        F.col('classes.label'))
+    .select(
+        F.col('targetFromSourceId').alias('target_id_'), 
+        F.col('classes.label'))
+    .groupBy('target_id_')
+    .agg(
+        F.count('label').alias('Nr_mouse_models'),
+        F.collect_set('label').alias('Different_PhenoClasses'))
+    .withColumn('Nr_Mousemodels',
+    F.when(F.col('Nr_mouse_models') !="0",F.lit(1))
+    .otherwise(None))    
+    .join(chemi_probes, chemi_probes.targetid == F.col('target_id_'),'right')
+
+    )
+    return moclass

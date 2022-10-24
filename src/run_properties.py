@@ -4,9 +4,9 @@ from re import X
 from pyspark.sql import DataFrame, SparkSession
 import pyspark.sql.functions as F
 from pyspark.sql.types import StructType, StructField, StringType
-
+import pyspark.sql.types as t 
 from VScode.target_engine.target.properties import biotype_query, drug_query, target_location
-from target_engine_repo.src.data_flow.target_properties import chemical_probes, constraint, mousemod_class, partner_drugs, target_membrane
+from target_engine_repo.src.data_flow.boolean_target_properties import chemical_probes, constraint, mousemod_class, partner_drugs, target_membrane
 
 spark = (
     SparkSession.builder.master("local[*]")
