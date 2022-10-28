@@ -76,13 +76,13 @@ def target_membrane(target, queryset):  ### to solve 0, nulls and 1
             "Nr_mb",
             F.when((F.col("loc") == "secreted&inMembrane"), F.lit(1))
             .when((F.col("loc") == "inMembrane"), F.lit(1))
-            .otherwise(F.lit("0")),
+            .otherwise(F.lit(0)),
         )
         .withColumn(
             "Nr_secreted",
             F.when((F.col("loc") == "secreted&inMembrane"), F.lit(1))
             .when((F.col("loc") == "onlySecreted"), F.lit(1))
-            .otherwise(F.lit("0")),
+            .otherwise(F.lit(0)),
         )
     )
     return membrane
@@ -136,7 +136,7 @@ def safety_query(target, queryset):
             F.array_distinct(F.collect_list("event")).alias("events"),
         )
         .withColumn(
-            "nrEvent", F.when(F.col("nEvents") != 0, F.lit(1)).otherwise(F.lit(0))
+            "nrEvent", F.when(F.col("nEvents") != 0, F.lit(-1)).otherwise(F.lit(0))
         )
         ### Make the join
         .join(queryset, F.col("saf_id") == queryset.targetid, "right")
@@ -246,7 +246,7 @@ def driver_genes(target, queryset):
         .select(F.col("id").alias("driver_id"), F.col("col.description"))
         .withColumn(
             "Nr_CDG",
-            F.when(F.col("description").isin(oncotsg_list), F.lit(1)).otherwise(
+            F.when(F.col("description").isin(oncotsg_list), F.lit(-1)).otherwise(
                 F.lit(0)
             ),
         )
