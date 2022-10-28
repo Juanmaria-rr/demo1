@@ -1,30 +1,57 @@
-from target_engine_repo.src.data_flow.boolean_target_properties import biotype_query
-from target_engine_repo.src.data_flow.target_properties import drug_query, target_membrane
+from target_engine_repo.src.data_flow.boolean_target_properties import biotype_query, chemical_probes, clin_trials, constraint, driver_genes, ligand_pocket_query, mousemod_class, orthologs_mouse, paralogs, safety_query, target_membrane, tep_query
+
+
+queryset=target.select('id').withColumnRenamed('id','targetid').limit(61524)
 
 
 biotype = biotype_query(target, queryset)
-location = target_membrane(target,biotype) 
-drug = drug_query(molecule,molecule_mec, location)
-chemi_probes= chemical_probes (target,drug)
-mouse_models= mousemod_class (mouse,chemi_probes)
-target_constraint = constraint (target,mouse_models)
+location = target_membrane(target, biotype)
+ligand_pocket = ligand_pocket_query (target, location)
+safety = safety_query (target, ligand_pocket)
+selection = constraint(target, safety)
+paralog = paralogs(target, selection)
+ortholog = orthologs_mouse(target, paralog)
+drivers = driver_genes(target, ortholog)
+tep = tep_query(target, drivers)
+mice = mousemod_class(mouse, tep)
+chemprob = chemical_probes(target, mice)
+drug_clin = clin_trials(molecule, molecule_mec, chemprob)
+
 
 #Selection of relevant columns
-info=(target_constraint
+info=(drug_clin
     .select(
         'targetid', 
         'Nr_biotype',
         'Nr_mb',
-        'Nr_drug', ## Any type of drug 'Approved' for the target
-        'Nr_chprob', ## Type and number of High Confidence chemical probes 
-        'Nr_Mousemodels', ## Number of mice models using containing the target
-        ## Distinct classes of mice models phenotypes
-        'cal_score' ##Classification of constraint towards Loss of function 
+        'Nr_secreted',
+        'Nr_Pocket',
+        'Nr_Ligand',
+        'nrEvent',
+        'cal_score',
+        'nr_paralogs',
+        'Nr_orth_Query_median',
+        'Nr_CDG',
+        'Nr_TEP',
+        'Nr_Mousemodels',
+        'Nr_chprob',
+        'maxClinTrialPhase'
     )
     .withColumnRenamed('Nr_biotype', 'isProteinCoding')
     .withColumnRenamed('Nr_mb', 'isInMembrane')
-    .withColumnRenamed('Nr_drug','hasDrugApproved')
-    .withColumnRenamed('Nr_chprob','hasHighQualityChemicalProbes')
-    .withColumnRenamed('Nr_Mousemodels','hasMouseKO')
+    .withColumnRenamed('Nr_secreted', 'isSecreted')
+    .withColumnRenamed('Nr_Pocket', 'hasPocket')
+    .withColumnRenamed('Nr_Ligand', 'hasLigand')
+    .withColumnRenamed('nrEvent', 'hasSafetyEvent')
     .withColumnRenamed('cal_score','geneticConstraint')
+    .withColumnRenamed('nr_paralogs', 'hasParalogs')
+    .withColumnRenamed('Nr_orth_Query_median','mouseOrthologIdentityPercentage')
+    .withColumnRenamed('Nr_CDG','isCancerDriverGene')
+    .withColumnRenamed('Nr_TEP','hasTEP')
+    .withColumnRenamed('Nr_Mousemodels','hasMouseKO')
+    .withColumnRenamed('Nr_chprob','hasHighQualityChemicalProbes')
+    .withColumnRenamed('maxClinTrialPhase','inClinicalTrials')
 )
+
+
+
