@@ -1,3 +1,5 @@
+## modification of parental dataset (we do not filter by null)
+### This seem to be the reliable part to work with the SLterms. 
 path="/Users/juanr/Desktop/Target_Engine/uniprot_slterms.tsv"
 df = spark.read.csv(path, sep=r'\t', header=True)
 ### 
@@ -23,25 +25,30 @@ df_1=(df
 )
 ######
 
-parental_2=(df_1
+parental=(df_1
 .select('Name','SubcellID','Is_a_exploded_SL').distinct()
 .withColumnRenamed('Is_a_exploded_SL','Is_a')
 )
 ## modification of child (we do not filter by not null)
-child_2=(df_1
+child=(df_1
 .select('SubcellID','Is_a_exploded_SL').distinct()
 .groupBy('Is_a_exploded_SL')
 .agg(F.collect_list(F.col('SubcellID')).alias('SubcellID_child'))
 )
 
-parental_child_2=(parental_2
-.join(child_2, parental_2.SubcellID == child_2.Is_a_exploded_SL, 'left')
+parental_child=(parental
+.join(child, parental.SubcellID == child.Is_a_exploded_SL, 'left')
 .select('Name','SubcellID','Is_a','SubcellID_child')
+)
+
+cousins=(df_1
+.groupBy(F.col('Is_part_SL'))
+.agg(F.collect_list('SubcellID').alias('SubcellID_are_part'))
 )
 ## we join with cousins: 
 ### unimos los cousins
-parent_child_cousins_2=(parental_child_2
-.join(cousins, cousins.Is_part_SL == parental_child_2.SubcellID, 'left')
+parent_child_cousins=(parental_child
+.join(cousins, cousins.Is_part_SL == parental_child.SubcellID, 'left')
 .select(
     F.col('Name'),
     F.col('SubcellID'),
@@ -58,4 +65,8 @@ parent_child_cousins_2=(parental_child_2
 .withColumn('toSearch', F.split(
     F.col('concat'),",")
     )
+)
+membrane_terms=(parent_child_cousins
+.filter(F.col('Name') == 'Cell membrane')
+.select(parent_child_cousins.toSearch).rdd.flatMap(lambda x: x).collect()[0]
 )
