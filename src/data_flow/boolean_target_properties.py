@@ -376,3 +376,39 @@ def clin_trials(molecule, molecule_mec, queryset):
     )
     ## Basicaly we put No in the null values
     return appdrug_targets
+
+
+def tissue_specific (hpa_data, queryset): 
+
+    cols_of_interest = [
+        "Ensembl",
+        "RNA tissue distribution",
+        "RNA tissue specificity",
+        "Antibody"    
+        ]
+
+    ## hpa_data = 'proteinatlas.json'
+
+    with open(hpa_data, 'r') as f:
+        for line in f:
+            entry = json.loads(line)
+            df = (
+                    pd.DataFrame(entry)
+                    .filter(items=cols_of_interest)
+            )
+    hpa_df=spark.createDataFrame(df)
+
+    hpa=(hpa_df
+    .select('Ensembl','RNA tissue distribution','RNA tissue specificity', 'Antibody')
+    .withColumnRenamed('RNA tissue distribution','Tissue_distribution_RNA')
+    .withColumnRenamed('RNA tissue specificity','Tissue_specificity_RNA')
+    .select('Ensembl','Tissue_specificity_RNA')
+    .withColumn('Nr_specificity', 
+        F.when((F.col('Tissue_specificity_RNA')=='Group enriched') | 
+                (F.col('Tissue_specificity_RNA')=='Tissue enriched'), F.lit(1))
+        .when(F.col('Tissue_specificity_RNA')=='Tissue enhanced', F.lit(0.5))
+        .when(F.col('Tissue_specificity_RNA')=='Low tissue specificity', F.lit(0))
+        .when(F.col('Tissue_specificity_RNA')=='Not detected', F.lit(None)))
+    .join(queryset, queryset.targetid == F.col("Ensembl"), "right")
+    )
+    return hpa 
