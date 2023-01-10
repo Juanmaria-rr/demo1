@@ -1,12 +1,23 @@
-# Do not forget to activate conda environment
-# Import pyspark and create session
+from target_engine_repo.src.data_flow.target_properties_wb import (
+    biotype_query,
+    chemical_probes,
+    clin_trials,
+    constraint,
+    driver_genes,
+    ligand_pocket_query,
+    mousemod_class,
+    orthologs_mouse,
+    paralogs,
+    safety_query,
+    target_membrane,
+    tep_query,
+    tissue_specific,
+)
 from re import X
 from pyspark.sql import DataFrame, SparkSession
 import pyspark.sql.functions as F
 from pyspark.sql.types import StructType, StructField, StringType
 import pyspark.sql.types as t 
-from VScode.target_engine.target.properties import biotype_query, drug_query, target_location
-from target_engine_repo.src.data_flow.boolean_target_properties import chemical_probes, constraint, mousemod_class, partner_drugs, target_membrane
 
 spark = (
     SparkSession.builder.master("local[*]")
@@ -27,34 +38,61 @@ mouse = spark.read.parquet(mouse_path)
 molecule_mec_path= "/Users/juanr/Desktop/Target_Engine/data_download/Parquet/mechanismOfAction/"
 molecule_mec=spark.read.parquet(molecule_mec_path)
 
-### Define queryset. In this case is 
-### a random sample of target dataset
-queryset=target.select('id').withColumnRenamed('id','targetid').sample(False, 0.3,seed=10).limit(10000)
+queryset = target.select("id").withColumnRenamed("id", "targetid").limit(61524)
+hpa_data = "proteinatlas.json"
 
-## Concatenated functions
 biotype = biotype_query(target, queryset)
-location = target_membrane(target,biotype) 
-drug = drug_query(molecule,molecule_mec, location)
-drug_partners = partner_drugs (molecule,interact_db,drug)
-chemi_probes= chemical_probes (target,drug_partners)
-mouse_models= mousemod_class (mouse,chemi_probes)
-target_constraint = constraint (target,mouse_models)
+location = target_membrane(target, biotype)
+ligand_pocket = ligand_pocket_query(target, location)
+safety = safety_query(target, ligand_pocket)
+selection = constraint(target, safety)
+paralog = paralogs(target, selection)
+ortholog = orthologs_mouse(target, paralog)
+drivers = driver_genes(target, ortholog)
+tep = tep_query(target, drivers)
+mice = mousemod_class(mouse, tep)
+chemprob = chemical_probes(target, mice)
+drug_clin = clin_trials(molecule, molecule_mec, chemprob)
+tissue_specificity = tissue_specific(hpa_data, drug_clin)
 
-#Selection of relevant columns
-info=(target_constraint
+info = (
+    tissue_specificity
+### Include filtering by biotype = protein coding 
+###    .filter(F.col('biotype') == 'protein_coding') 
+### Then, remove the column isProteinCoding.
     .select(
-        'targetid', 
-        'approvedSymbol',
-        'biotype', ## description
-        'IsinMembrane', ## description
-        'App_drug_ChEMBL', ## Any type of drug 'Approved' for the target
-        'App_drug_actionType',
-        'N_partner_drug', ## Number of partners with at least 1 drug
-        'ChemicalProbes_HC', ## Type and number of High Confidence chemical probes 
-        'Nr_mouse_models', ## Number of mice models using containing the target
-        'Different_PhenoClasses', ## Distinct classes of mice models phenotypes
-        'Selection' ##Classification of constraint towards Loss of function 
-    ))
-
-
-
+        "targetid",
+    ### "Nr_biotype",
+        "Nr_mb",
+        "Nr_secreted",
+        "Nr_Pocket",
+        "Nr_Ligand",
+        "Nr_Event",
+        "cal_score",
+        "Nr_paralogs",
+        "Nr_ortholog",
+        "Nr_CDG",
+        "Nr_TEP",
+        "Nr_Mousemodels",
+        "Nr_chprob",
+        "maxClinTrialPhase",
+        "Nr_specificity",
+        'Nr_distribution'
+    )
+    ### .withColumnRenamed("Nr_biotype", "isProteinCoding")
+    .withColumnRenamed("Nr_mb", "isInMembrane")
+    .withColumnRenamed("Nr_secreted", "isSecreted")
+    .withColumnRenamed("Nr_Pocket", "hasPocket")
+    .withColumnRenamed("Nr_Ligand", "hasLigand")
+    .withColumnRenamed("Nr_Event", "hasSafetyEvent")
+    .withColumnRenamed("cal_score", "geneticConstraint")
+    .withColumnRenamed("Nr_paralogs", "paralogMaxIdentityPercentage")### renombrar maxParalogIdentityPercentage
+    .withColumnRenamed("Nr_ortholog", "mouseOrthologMaxIdentityPercentage") ### mouseOrthologMaxIdentityPercentage
+    .withColumnRenamed("Nr_CDG", "isCancerDriverGene")
+    .withColumnRenamed("Nr_TEP", "hasTEP")
+    .withColumnRenamed("Nr_Mousemodels", "hasMouseKO")
+    .withColumnRenamed("Nr_chprob", "hasHighQualityChemicalProbes")
+    .withColumnRenamed("maxClinTrialPhase", "maxClinicalTrialPhase") ## previously 'inClinicalTrials'
+    .withColumnRenamed("Nr_specificity", "tissueSpecificity") ### incluir en id de Carlos
+    .withColumnRenamed("Nr_distribution", "tissueDistribution") ### incluir en id de Carlos
+)
