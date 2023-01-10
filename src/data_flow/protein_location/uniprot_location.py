@@ -1,3 +1,5 @@
+### ontology/hierarchy of SL-terms ### 31.10.2022 ### 
+
 ## modification of parental dataset (we do not filter by null)
 ### This seem to be the reliable part to work with the SLterms. 
 path="/Users/juanr/Desktop/Target_Engine/uniprot_slterms.tsv"
