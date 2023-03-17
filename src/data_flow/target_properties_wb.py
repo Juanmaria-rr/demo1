@@ -100,82 +100,63 @@ def target_membrane(target, queryset):  ### to solve 0, nulls and 1
             F.array_distinct(F.collect_list("Count_mb")).alias("mb"),
             F.count("source").alias("counted"),
         )
+        .withColumnRenamed("mb", "mb2")
+        .withColumn("mb", F.concat_ws(",", "mb2"))
+        .withColumn(
+            "HPA_membrane",
+            F.when(
+                ((F.col("mb").rlike("HPA_1")) | (F.col("mb").rlike("HPA_add_1"))),
+                F.lit("yes"),
+            ).otherwise(F.lit("no")),
+        )
+        .withColumn(
+            "HPA_secreted",
+            F.when(F.col("mb").rlike("HPA_secreted"), F.lit("yes")).otherwise(
+                F.lit("no")
+            ),
+        )
+        .withColumn(
+            "uniprot_membrane",
+            F.when(F.col("mb").rlike("uniprot_1"), F.lit("yes")).otherwise(F.lit("no")),
+        )
+        .withColumn(
+            "uniprot_secreted",
+            F.when(F.col("mb").rlike("uniprot_secreted"), F.lit("yes")).otherwise(
+                F.lit("no")
+            ),
+        )
         .withColumn(
             "loc",
             F.when(
-                (
-                    (
-                        F.array_contains(F.col("mb"), "HPA_secreted")
-                        & F.array_contains(F.col("mb"), "uniprot_secreted")
-                    )
-                )
-                & (F.col("counted") == 2),
+                (F.col("HPA_membrane") == "yes") & (F.col("HPA_secreted") == "no"),
+                F.lit("inMembrane"),
+            )
+            .when(
+                (F.col("HPA_membrane") == "no") & (F.col("HPA_secreted") == "yes"),
                 F.lit("onlySecreted"),
             )
             .when(
-                (
-                    (
-                        F.array_contains(F.col("mb"), "HPA_1")
-                        & F.array_contains(F.col("mb"), "HPA_secreted")
-                    )
-                    & (F.col("counted") > 2)
-                ),
+                (F.col("HPA_membrane") == "yes") & (F.col("HPA_secreted") == "yes"),
                 F.lit("secreted&inMembrane"),
             )
             .when(
-                (
-                    (
-                        F.array_contains(F.col("mb"), "HPA_secreted")
-                        & (
-                            F.array_contains(F.col("mb"), "HPA_add_1")
-                            | F.array_contains(F.col("mb"), "HPA_1")
-                        )
-                    )
+                (F.col("HPA_membrane") == "no") & (F.col("HPA_secreted") == "no"),
+                F.when(
+                    (F.col("uniprot_membrane") == "yes")
+                    & (F.col("uniprot_secreted") == "no"),
+                    F.lit("inMembrane"),
                 )
-                & (F.col("counted") == 2),
-                F.lit("secreted&inMembrane"),
-            )
-            .when(
-                (
-                    (
-                        F.array_contains(F.col("mb"), "HPA_secreted")
-                        | F.array_contains(F.col("mb"), "uniprot_secreted")
-                    )
+                .when(
+                    (F.col("uniprot_membrane") == "no")
+                    & (F.col("uniprot_secreted") == "yes"),
+                    F.lit("onlySecreted"),
                 )
-                & (F.col("counted") == 1),
-                F.lit("onlySecreted"),
-            )
-            .when(
-                (
-                    (
-                        F.array_contains(F.col("mb"), "HPA_secreted")
-                        & F.array_contains(F.col("mb"), "uniprot_1")
-                    )
-                )
-                & (F.col("counted") == 2),
-                F.lit("onlySecreted"),
-            )
-            .when(
-                (
-                    (
-                        F.array_contains(F.col("mb"), "HPA_secreted")
-                        & F.array_contains(F.col("mb"), "uniprot_secreted")
-                    )
-                    & (F.col("counted") == 2)
+                .when(
+                    (F.col("uniprot_membrane") == "yes")
+                    & (F.col("uniprot_secreted") == "yes"),
+                    F.lit("secreted&inMembrane"),
                 ),
-                F.lit("onlySecreted"),
-            )
-            .when(
-                (
-                    (
-                        F.array_contains(F.col("mb"), "uniprot_1")
-                        & F.array_contains(F.col("mb"), "uniprot_secreted")
-                        & (F.col("counted") == 2)
-                    )
-                ),
-                F.lit("secreted&inMembrane"),
-            )
-            .otherwise(F.lit("inMembrane")),
+            ),
         )
         .join(queryset, F.col("loc_id") == queryset.targetid, "right")
         .join(location_info, F.col("targetid") == location_info.location_id, "left")
@@ -189,11 +170,13 @@ def target_membrane(target, queryset):  ### to solve 0, nulls and 1
                 F.lit(1),
             )
             .when(
-                ((F.col("loc").isNull()) | (F.col("loc") == "onlySecreted"))
-                & (F.col("result") == "hasInfo"),
+                (
+                    (F.col("loc") != "secreted&inMembrane")
+                    | (F.col("loc") != "inMembrane")
+                ),
                 F.lit(0),
             )
-            .when(F.col("loc") == None, F.lit(None)),
+            .when((F.col("loc").isNull()) & (F.col("result") == "hasInfo"), F.lit(0)),
         )
         .withColumn(
             "Nr_secreted",
@@ -203,8 +186,7 @@ def target_membrane(target, queryset):  ### to solve 0, nulls and 1
                 F.lit(1),
             )
             .when(
-                ((F.col("loc").isNull()) | (F.col("loc") == "inMembrane"))
-                & (F.col("result") == "hasInfo"),
+                ((F.col("loc") == "inMembrane")) & (F.col("result") == "hasInfo"),
                 F.lit(0),
             )
             .when(
@@ -224,6 +206,8 @@ def target_membrane(target, queryset):  ### to solve 0, nulls and 1
 
 ######### ----- ########
 ### fixed 04.11.2022
+
+
 def ligand_pocket_query(target, queryset):
     ligpock = (
         target.select(
