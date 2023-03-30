@@ -24,10 +24,8 @@ def biotype_query(target, queryset):  ### solved, removed DropDuplicates
     return target_biotype
 
 
-def target_membrane(target, queryset):  ### to solve 0, nulls and 1
+def target_membrane(target, queryset):  #### fixed membrane function: 30.03.2023
 
-    ### Fine tunned function for including the secreted terms from uniprot.
-    ### 03.11.2022 ###
     membrane_terms = (
         parent_child_cousins.filter(F.col("Name") == "Cell membrane")
         .select(parent_child_cousins.toSearch)
@@ -60,8 +58,8 @@ def target_membrane(target, queryset):  ### to solve 0, nulls and 1
         "HPA_add_1",
         "uniprot_1",
         "uniprot_secreted",
+        "HPA_dif",  ## new
     ]
-
     membrane = (
         target.select(
             F.col("id").alias("loc_id"), F.explode_outer("subcellularLocations")
@@ -75,6 +73,11 @@ def target_membrane(target, queryset):  ### to solve 0, nulls and 1
                 F.lit("HPA_1"),
             )
             .when(
+                (F.col("source") == "HPA_main")
+                & (F.col("termSL").isin(membrane_terms) == False),
+                F.lit("HPA_dif"),  ### new
+            )
+            .when(
                 (F.col("source") == "HPA_extracellular_location"), F.lit("HPA_secreted")
             )
             .when(
@@ -83,10 +86,15 @@ def target_membrane(target, queryset):  ### to solve 0, nulls and 1
                 F.lit("HPA_add_1"),
             )
             .when(
+                (F.col("source") == "HPA_additional")
+                & (F.col("termSL").isin(membrane_terms) == False),
+                F.lit("HPA_dif"),  ### new
+            )
+            .when(
                 (F.col("source") == "uniprot") & (F.col("termSL").isin(membrane_terms)),
                 F.lit("uniprot_1"),
             )
-            .when(  ### Hacer el nuevo subset para
+            .when(
                 (F.col("source") == "uniprot") & (F.col("termSL").isin(secreted_terms)),
                 F.lit("uniprot_secreted"),
             )
@@ -97,42 +105,50 @@ def target_membrane(target, queryset):  ### to solve 0, nulls and 1
         .dropDuplicates(["loc_id", "Count_mb"])
         .groupBy("loc_id")
         .agg(
-            F.array_distinct(F.collect_list("Count_mb")).alias("mb"),
+            F.collect_set("Count_mb").alias("mb"),  ### new
             F.count("source").alias("counted"),
         )
-        .withColumnRenamed("mb", "mb2")
-        .withColumn("mb", F.concat_ws(",", "mb2"))
         .withColumn(
             "HPA_membrane",
             F.when(
-                ((F.col("mb").rlike("HPA_1")) | (F.col("mb").rlike("HPA_add_1"))),
+                (
+                    (F.array_contains(F.col("mb"), "HPA_1"))
+                    | (F.array_contains(F.col("mb"), "HPA_add_1"))
+                ),
                 F.lit("yes"),
-            ).otherwise(F.lit("no")),
+            )
+            .when((F.array_contains(F.col("mb"), "HPA_dif")), F.lit("dif"))  ### new
+            .otherwise(F.lit("no")),
         )
         .withColumn(
             "HPA_secreted",
-            F.when(F.col("mb").rlike("HPA_secreted"), F.lit("yes")).otherwise(
-                F.lit("no")
-            ),
+            F.when(
+                F.array_contains(F.col("mb"), "HPA_secreted"), F.lit("yes")
+            ).otherwise(F.lit("no")),
         )
         .withColumn(
             "uniprot_membrane",
-            F.when(F.col("mb").rlike("uniprot_1"), F.lit("yes")).otherwise(F.lit("no")),
+            F.when(F.array_contains(F.col("mb"), "uniprot_1"), F.lit("yes")).otherwise(
+                F.lit("no")
+            ),
         )
         .withColumn(
             "uniprot_secreted",
-            F.when(F.col("mb").rlike("uniprot_secreted"), F.lit("yes")).otherwise(
-                F.lit("no")
-            ),
+            F.when(
+                F.array_contains(F.col("mb"), "uniprot_secreted"), F.lit("yes")
+            ).otherwise(F.lit("no")),
         )
         .withColumn(
             "loc",
             F.when(
-                (F.col("HPA_membrane") == "yes") & (F.col("HPA_secreted") == "no"),
+                ((F.col("HPA_membrane") == "yes")) & (F.col("HPA_secreted") == "no"),
                 F.lit("inMembrane"),
             )
             .when(
-                (F.col("HPA_membrane") == "no") & (F.col("HPA_secreted") == "yes"),
+                (
+                    (F.col("HPA_membrane") == "no") | (F.col("HPA_membrane") == "dif")
+                )  ### new
+                & (F.col("HPA_secreted") == "yes"),
                 F.lit("onlySecreted"),
             )
             .when(
@@ -156,7 +172,8 @@ def target_membrane(target, queryset):  ### to solve 0, nulls and 1
                     & (F.col("uniprot_secreted") == "yes"),
                     F.lit("secreted&inMembrane"),
                 ),
-            ),
+            )
+            .when(F.col("HPA_membrane") == "dif", F.lit("noMembraneHPA")),  ### new
         )
         .join(queryset, F.col("loc_id") == queryset.targetid, "right")
         .join(location_info, F.col("targetid") == location_info.location_id, "left")
