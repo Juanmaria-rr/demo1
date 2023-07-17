@@ -1,9 +1,7 @@
-### Load functions
-
-from pyspark import F
+import pyspark.sql.functions as F
 
 
-def biotype_query(target, queryset):  ### solved, removed DropDuplicates
+def biotype_query(target, queryset):
     target_biotype = (
         target.select(F.col("id").alias("biotypeid"), "biotype")
         .select("biotypeid", "biotype")
@@ -24,7 +22,7 @@ def biotype_query(target, queryset):  ### solved, removed DropDuplicates
     return target_biotype
 
 
-def target_membrane(target, queryset):  #### fixed membrane function: 30.03.2023
+def target_membrane(target, queryset):
 
     membrane_terms = (
         parent_child_cousins.filter(F.col("Name") == "Cell membrane")
@@ -45,7 +43,7 @@ def target_membrane(target, queryset):  #### fixed membrane function: 30.03.2023
             F.col("id").alias("location_id"), F.explode_outer("subcellularLocations")
         )
         .withColumn(
-            "result",  ## annotate which rows are 'null'
+            "result",
             F.when(F.col("col.location").isNull(), "noInfo").otherwise("hasInfo"),
         )
         .select("location_id", "result")
@@ -58,7 +56,7 @@ def target_membrane(target, queryset):  #### fixed membrane function: 30.03.2023
         "HPA_add_1",
         "uniprot_1",
         "uniprot_secreted",
-        "HPA_dif",  ## new
+        "HPA_dif",
     ]
     membrane = (
         target.select(
@@ -75,7 +73,7 @@ def target_membrane(target, queryset):  #### fixed membrane function: 30.03.2023
             .when(
                 (F.col("source") == "HPA_main")
                 & (F.col("termSL").isin(membrane_terms) == False),
-                F.lit("HPA_dif"),  ### new
+                F.lit("HPA_dif"),
             )
             .when(
                 (F.col("source") == "HPA_extracellular_location"), F.lit("HPA_secreted")
@@ -88,7 +86,7 @@ def target_membrane(target, queryset):  #### fixed membrane function: 30.03.2023
             .when(
                 (F.col("source") == "HPA_additional")
                 & (F.col("termSL").isin(membrane_terms) == False),
-                F.lit("HPA_dif"),  ### new
+                F.lit("HPA_dif"),
             )
             .when(
                 (F.col("source") == "uniprot") & (F.col("termSL").isin(membrane_terms)),
@@ -105,7 +103,7 @@ def target_membrane(target, queryset):  #### fixed membrane function: 30.03.2023
         .dropDuplicates(["loc_id", "Count_mb"])
         .groupBy("loc_id")
         .agg(
-            F.collect_set("Count_mb").alias("mb"),  ### new
+            F.collect_set("Count_mb").alias("mb"),
             F.count("source").alias("counted"),
         )
         .withColumn(
@@ -117,7 +115,7 @@ def target_membrane(target, queryset):  #### fixed membrane function: 30.03.2023
                 ),
                 F.lit("yes"),
             )
-            .when((F.array_contains(F.col("mb"), "HPA_dif")), F.lit("dif"))  ### new
+            .when((F.array_contains(F.col("mb"), "HPA_dif")), F.lit("dif"))
             .otherwise(F.lit("no")),
         )
         .withColumn(
@@ -145,9 +143,7 @@ def target_membrane(target, queryset):  #### fixed membrane function: 30.03.2023
                 F.lit("inMembrane"),
             )
             .when(
-                (
-                    (F.col("HPA_membrane") == "no") | (F.col("HPA_membrane") == "dif")
-                )  ### new
+                ((F.col("HPA_membrane") == "no") | (F.col("HPA_membrane") == "dif"))
                 & (F.col("HPA_secreted") == "yes"),
                 F.lit("onlySecreted"),
             )
@@ -173,7 +169,7 @@ def target_membrane(target, queryset):  #### fixed membrane function: 30.03.2023
                     F.lit("secreted&inMembrane"),
                 ),
             )
-            .when(F.col("HPA_membrane") == "dif", F.lit("noMembraneHPA")),  ### new
+            .when(F.col("HPA_membrane") == "dif", F.lit("noMembraneHPA")),
         )
         .join(queryset, F.col("loc_id") == queryset.targetid, "right")
         .join(location_info, F.col("targetid") == location_info.location_id, "left")
@@ -221,10 +217,6 @@ def target_membrane(target, queryset):  #### fixed membrane function: 30.03.2023
     return membrane
 
 
-######### ----- ########
-### fixed 04.11.2022
-
-
 def ligand_pocket_query(target, queryset):
     ligpock = (
         target.select(
@@ -234,11 +226,10 @@ def ligand_pocket_query(target, queryset):
         .filter(
             ((F.col("new_struct.id") == "High-Quality Ligand"))
             | ((F.col("new_struct.id") == "High-Quality Pocket"))
+            | ((F.col("new_struct.id") == "Small Molecule Binder"))
         )
         .withColumn("type", F.col("new_struct").getItem("id"))
-        .withColumn(
-            "presence", F.col("new_struct").getItem("value").cast("integer")
-        )  ## cast convert True = 1/ False = 0.
+        .withColumn("presence", F.col("new_struct").getItem("value").cast("integer"))
         .groupBy("target_id")
         .pivot("type")
         .agg(F.sum("presence"))
@@ -250,31 +241,28 @@ def ligand_pocket_query(target, queryset):
             "Nr_Pocket",
             F.when(F.col("High-Quality Pocket") == 1, F.lit(1)).otherwise(F.lit(0)),
         )
+        .withColumn(
+            "Nr_sMBinder",
+            F.when(F.col("Small Molecule Binder") == 1, F.lit(1)).otherwise(F.lit(0)),
+        )
         .join(queryset, F.col("target_id") == queryset.targetid, "right")
         .withColumn(
-            "hasLigand",  ### F.col('Nr_Ligand').cast('boolean'),
+            "hasLigand",
             F.when(F.col("Nr_Ligand") == 1, F.lit("Yes"))
             .when(F.col("Nr_Ligand") == 0, F.lit("No"))
             .otherwise(F.lit(None)),
         )
-        .na.fill("noInfo")
         .withColumn(
-            "hasPocket",  ### F.col('Nr_Ligand').cast('boolean'),
+            "hasPocket",
             F.when(F.col("Nr_Pocket") == 1, F.lit("Yes"))
             .when(F.col("Nr_Pocket") == 0, F.lit("No"))
             .otherwise(F.lit(None)),
         )
-        .na.fill("noInfo")
     )
     return ligpock
 
 
-############
-
-
-def safety_query(
-    target, queryset
-):  ### 04.11.2022 donde anadimos columna 'info' con noReported para tagets con Null
+def safety_query(target, queryset):
     safety = (
         target.withColumn(
             "info",
@@ -346,19 +334,13 @@ def constraint(target, queryset):
                 - 1
             ),
         )
-        ## JOIN with Queryset
         .select("constr_id", "cal_score", "constraintType")
         .join(queryset, queryset.targetid == F.col("constr_id"), "right")
     )
     return loftolerance
 
 
-def paralogs(
-    target, queryset
-):  ### HECHA columna Yes/No y cambiado orden de withColumn (la ponemos ahora antes del join)
-    ### 04.11.2022 Rehacer columna de numero porque tener paralogo es .
-    ### Added continuous value from 60 to 100 and 0 for values from 0 to 60.
-    ### Negative value because is SAFETY
+def paralogs(target, queryset):
     paralog = (
         target.withColumn(
             "hasInfo",
@@ -399,18 +381,14 @@ def paralogs(
     return paralog
 
 
-def orthologs_mouse(
-    target, queryset
-):  ### Added continuous value from 80 to 100 and 0 for values from 0 to 80.
-    #### Doability
+def orthologs_mouse(target, queryset):
     ortholog = (
         target.select(F.col("id"), F.explode(F.col("homologues")))
         .select(F.col("id").alias("ortholog_id"), F.col("col.*"))
         .withColumn("homoType", F.split(F.col("homologyType"), "_").getItem(0))
         .withColumn("howmany", F.split(F.col("homologyType"), "_").getItem(1))
         .filter(
-            (F.col("homoType").contains("ortholog"))
-            & (F.col("speciesName") == "Mouse")  ### Filter by one_2_one?
+            (F.col("homoType").contains("ortholog")) & (F.col("speciesName") == "Mouse")
         )
         .select(
             "ortholog_id",
@@ -433,9 +411,8 @@ def orthologs_mouse(
     return ortholog
 
 
-def driver_genes(target, queryset):  ## HECHA COLUMNA Yes/No
-    ## Added -1/Null and Yes/Null 04.11.2022
-    oncotsg_list = [  ## Fix duplicated targets 08.11.2022
+def driver_genes(target, queryset):
+    oncotsg_list = [
         "TSG",
         "oncogene",
         "Oncogene",
@@ -470,7 +447,19 @@ def driver_genes(target, queryset):  ## HECHA COLUMNA Yes/No
     return driver
 
 
-#############
+def essentiality(geneEssentiality, queryset):
+    essential = (
+        geneEssentiality.select(
+            "id", F.explode_outer("geneEssentiality").alias("geneEssentiality")
+        )
+        .withColumn(
+            "Nr_essential", -F.col("geneEssentiality.isEssential").cast("integer")
+        )
+        .select(F.col("id").alias("idEssential"), "Nr_essential")
+        .join(queryset, queryset.targetid == F.col("idEssential"), "right")
+    )
+
+    return essential
 
 
 def tep_query(target, queryset):
@@ -483,7 +472,6 @@ def tep_query(target, queryset):
             "Nr_TEP",
             F.when(F.col("description") != "null", F.lit(1)).otherwise(F.lit(None)),
         )
-        ### Make join
         .join(queryset, queryset.targetid == F.col("tep_id"), "right")
     )
     return tep
@@ -515,11 +503,9 @@ def mousemod_class(mouse, queryset):
     return moclass
 
 
-def chemical_probes(target, queryset):  ### High-Quality Chemical Probes
+def chemical_probes(target, queryset):
     chprob = (
-        target.select(  ### Fixed 04.11.2022: No = does not have HQCP, Yes = it has, Null has no info.
-            F.col("id").alias("chemid"), F.col("chemicalProbes")
-        )
+        target.select(F.col("id").alias("chemid"), F.col("chemicalProbes"))
         .withColumn(
             "info",
             F.when(F.col("chemicalProbes") != F.array(), F.lit("hasInfo")).otherwise(
@@ -549,7 +535,6 @@ def chemical_probes(target, queryset):  ### High-Quality Chemical Probes
             .when(F.col("Nr_chprob") == 0, F.lit("No"))
             .otherwise(F.lit(None)),
         )
-        #### .select('chemid','info','hasHQCP','Nr_HQCP')
         .join(queryset, queryset.targetid == F.col("chemid"), "right")
     )
     return chprob
@@ -580,12 +565,6 @@ def clin_trials(molecule, queryset):
 
 def tissue_specific(hpa_data, queryset):
 
-    ### On 01.11.2022 we add the tissue distribution column:
-
-    import json
-    import pandas as pd
-    from pyspark.sql import SQLContext
-
     cols_of_interest = [
         "Ensembl",
         "RNA tissue distribution",
@@ -609,13 +588,9 @@ def tissue_specific(hpa_data, queryset):
         .withColumnRenamed("RNA tissue specificity", "Tissue_specificity_RNA")
         .select("Ensembl", "Tissue_specificity_RNA", "Tissue_distribution_RNA")
         .withColumn(
-            "Nr_specificity",  ### Fixed numbers asigned to the distribution thing (is SAFETY) 04.11.2022
-            F.when(
-                F.col("Tissue_specificity_RNA") == "Tissue enriched", F.lit(1)
-            )  ### tissue enriched 1
-            .when(
-                F.col("Tissue_specificity_RNA") == "Group enriched", F.lit(0.75)
-            )  ### group enriched 0.5
+            "Nr_specificity",
+            F.when(F.col("Tissue_specificity_RNA") == "Tissue enriched", F.lit(1))
+            .when(F.col("Tissue_specificity_RNA") == "Group enriched", F.lit(0.75))
             .when(F.col("Tissue_specificity_RNA") == "Tissue enhanced", F.lit(0.5))
             .when(
                 F.col("Tissue_specificity_RNA") == "Low tissue specificity", F.lit(-1)
@@ -623,19 +598,14 @@ def tissue_specific(hpa_data, queryset):
             .when(F.col("Tissue_specificity_RNA") == "Not detected", F.lit(None)),
         )
         .withColumn(
-            "Nr_distribution",  ### Fixed numbers asigned to the distribution thing (is SAFETY) 04.11.2022
-            F.when(
-                F.col("Tissue_distribution_RNA") == "Detected in single", F.lit(1)
-            )  ### single 1 // only in one tissue
-            .when(
-                F.col("Tissue_distribution_RNA") == "Detected in some", F.lit(0.5)
-            )  ### some 0.5 // more thann one but less than 1/3
-            .when(
-                F.col("Tissue_distribution_RNA") == "Detected in many", F.lit(0)
-            )  ## at least 1/3 but not all tissues
+            "Nr_distribution",
+            F.when(F.col("Tissue_distribution_RNA") == "Detected in single", F.lit(1))
+            .when(F.col("Tissue_distribution_RNA") == "Detected in some", F.lit(0.5))
+            .when(F.col("Tissue_distribution_RNA") == "Detected in many", F.lit(0))
             .when(F.col("Tissue_distribution_RNA") == "Detected in all", F.lit(-1))
             .when(F.col("Tissue_distribution_RNA") == "Not detected", F.lit(None)),
         )
         .join(queryset, queryset.targetid == F.col("Ensembl"), "right")
     )
+
     return hpa
