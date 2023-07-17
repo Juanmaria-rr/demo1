@@ -26,24 +26,22 @@ spark = (
     .getOrCreate()
 )
 ### Define required datasets
-target_path = "/Users/juanr/Desktop/Target_Engine/data_download/Parquet/target/targets/"
+target_path = "/Users/juanr/Desktop/Target_Engine/20230717_targetPrioritisation/release23.06/targets/"
 target = spark.read.parquet(target_path)
-interact_path = "/Users/juanr/Desktop/Target_Engine/data_download/Parquet/interaction/"
-interact_db = spark.read.parquet(interact_path)
-molecule_path = (
-    "/Users/juanr/Desktop/Target_Engine/data_download/Parquet/drug/molecule/"
-)
+molecule_path = "/Users/juanr/Desktop/Target_Engine/20230717_targetPrioritisation/release23.06/molecule/"
 molecule = spark.read.parquet(molecule_path)
-mouse_path = "/Users/juanr/Desktop/Target_Engine/data_download/Parquet/mousePhenotypes"
+mouse_path = "/Users/juanr/Desktop/Target_Engine/20230717_targetPrioritisation/release23.06/mousePhenotypes/"
 mouse = spark.read.parquet(mouse_path)
-molecule_mec_path = (
-    "/Users/juanr/Desktop/Target_Engine/data_download/Parquet/mechanismOfAction/"
-)
+molecule_mec_path = "/Users/juanr/Desktop/Target_Engine/20230717_targetPrioritisation/release23.06/mechanismOfAction/"
 molecule_mec = spark.read.parquet(molecule_mec_path)
+essentiality_path = "/Users/juanr/Desktop/Target_Engine/20230717_targetPrioritisation/release23.06/geneEssentiality/targetEssentiality/"
+geneEssentiality = spark.read.parquet(essentiality_path)
+
 
 queryset = target.select("id").withColumnRenamed("id", "targetid")
 hpa_data = "/Users/juanr/Desktop/Target_Engine/proteinatlas.json"
 
+## chained functions
 biotype = biotype_query(target, queryset)
 location = target_membrane(target, biotype)
 ligand_pocket = ligand_pocket_query(target, location)
@@ -52,29 +50,27 @@ selection = constraint(target, safety)
 paralog = paralogs(target, selection)
 ortholog = orthologs_mouse(target, paralog)
 drivers = driver_genes(target, ortholog)
-tep = tep_query(target, drivers)
+geneEssential = essentiality(geneEssentiality, drivers)
+tep = tep_query(target, geneEssential)
 mice = mousemod_class(mouse, tep)
 chemprob = chemical_probes(target, mice)
 drug_clin = clin_trials(molecule, chemprob)
 tissue_specificity = tissue_specific(hpa_data, drug_clin)
-
+## select relevant columns
 info = (
-    tissue_specificity
-    ### Include filtering by biotype = protein coding
-    ###    .filter(F.col('biotype') == 'protein_coding')
-    ### Then, remove the column isProteinCoding.
-    .select(
+    tissue_specificity.select(
         "targetid",
-        ### "Nr_biotype",
         "Nr_mb",
         "Nr_secreted",
         "Nr_Pocket",
         "Nr_Ligand",
+        "Nr_sMBinder",
         "Nr_Event",
         "cal_score",
         "Nr_paralogs",
         "Nr_ortholog",
         "Nr_CDG",
+        "Nr_essential",
         "Nr_TEP",
         "Nr_Mousemodels",
         "Nr_chprob",
@@ -86,11 +82,13 @@ info = (
     .withColumnRenamed("Nr_secreted", "isSecreted")
     .withColumnRenamed("Nr_Pocket", "hasPocket")
     .withColumnRenamed("Nr_Ligand", "hasLigand")
+    .withColumnRenamed("Nr_sMBinder", "hasSmallMoleculeBinder")
     .withColumnRenamed("Nr_Event", "hasSafetyEvent")
     .withColumnRenamed("cal_score", "geneticConstraint")
     .withColumnRenamed("Nr_paralogs", "paralogMaxIdentityPercentage")
     .withColumnRenamed("Nr_ortholog", "mouseOrthologMaxIdentityPercentage")
     .withColumnRenamed("Nr_CDG", "isCancerDriverGene")
+    .withColumnRenamed("Nr_essential", "isEssential")
     .withColumnRenamed("Nr_TEP", "hasTEP")
     .withColumnRenamed("Nr_Mousemodels", "hasMouseKO")
     .withColumnRenamed("Nr_chprob", "hasHighQualityChemicalProbes")
