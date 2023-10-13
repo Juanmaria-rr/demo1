@@ -12,6 +12,7 @@ from target_engine_repo.src.data_flow.target_properties_wb import (
     target_membrane,
     tep_query,
     tissue_specific,
+    mouse_phenotypes
 )
 from re import X
 from pyspark.sql import DataFrame, SparkSession
@@ -36,7 +37,8 @@ molecule_mec_path = "/Users/juanr/Desktop/Target_Engine/20230717_targetPrioritis
 molecule_mec = spark.read.parquet(molecule_mec_path)
 essentiality_path = "/Users/juanr/Desktop/Target_Engine/20230717_targetPrioritisation/release23.06/geneEssentiality/targetEssentiality/"
 geneEssentiality = spark.read.parquet(essentiality_path)
-
+mousePhenotypes_path = "/Users/juanr/Desktop/safetyMouseHuman/23.09/mousePhenotypes/"
+mousePhenotypes = spark.read.parquet(mousePhenotypes_path)
 
 queryset = target.select("id").withColumnRenamed("id", "targetid")
 hpa_data = "/Users/juanr/Desktop/Target_Engine/proteinatlas.json"
@@ -56,9 +58,11 @@ mice = mousemod_class(mouse, tep)
 chemprob = chemical_probes(target, mice)
 drug_clin = clin_trials(molecule, chemprob)
 tissue_specificity = tissue_specific(hpa_data, drug_clin)
+mouse_pheno = mouse_phenotypes(mousePhenotypes, tissue_specificity)
+
 ## select relevant columns
 info = (
-    tissue_specificity.select(
+    mouse_pheno.select(
         "targetid",
         "Nr_mb",
         "Nr_secreted",
@@ -77,6 +81,7 @@ info = (
         "inClinicalTrials",
         "Nr_specificity",
         "Nr_distribution",
+        "scaledHarmonicSum"
     )
     .withColumnRenamed("Nr_mb", "isInMembrane")
     .withColumnRenamed("Nr_secreted", "isSecreted")
@@ -95,4 +100,5 @@ info = (
     .withColumnRenamed("inClinicalTrials", "maxClinicalTrialPhase")
     .withColumnRenamed("Nr_specificity", "tissueSpecificity")
     .withColumnRenamed("Nr_distribution", "tissueDistribution")
+    .withColumnRenamed("scaledHarmonicSum", "phenotypeScores")
 )

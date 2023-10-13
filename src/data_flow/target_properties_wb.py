@@ -1,4 +1,7 @@
+from pyspark.sql import Window
 import pyspark.sql.functions as F
+from pyspark.ml.functions import array_to_vector
+from pyspark.sql.functions import udf
 
 
 def biotype_query(target, queryset):
@@ -609,3 +612,64 @@ def tissue_specific(hpa_data, queryset):
     )
 
     return hpa
+
+
+def mouse_phenotypes(mousePhenotypes, queryset):
+
+    mopheScore_path = "/Users/juanr/Desktop/target_engine_repo/src/data_flow/phenotypeScores/20230825_mousePheScores.csv"
+    mopheScore = spark.read.csv(mopheScore_path, header=True)
+    mousePhenoScoreFilter = mopheScore.select(
+        F.col("id").alias("idLabel"),
+        F.col("label").alias("phenoLabel"),
+        F.col("score"),
+    ).withColumn(
+        "score",
+        F.when(F.col("score") == 0.0, F.lit(0)).otherwise(F.lit(F.col("score"))),
+    )
+
+    ### Define Harmonic Sum function:
+    def harmonic_sum(evidence_scores):
+        harmonic_sum = sum(
+            score / ((i + 1) ** (2)) for i, score in enumerate(evidence_scores)
+        )
+        return float(harmonic_sum)
+
+    ### Define max Harmonic Sum function:
+    def max_harmonic_sum(evidence_scores):
+        max_theoretical_harmonic_sum = sum(
+            1 / ((i + 1) ** (2)) for i in range(len(evidence_scores))
+        )
+        return float(max_theoretical_harmonic_sum)
+
+    ### define function to scale the harmonic sum
+    def scaledHarmonic(score, maximum):
+        scaled_harmonic = score / maximum
+        return float(scaled_harmonic)
+
+    harmonic_sum_udf = udf(harmonic_sum)
+    max_harmonic_sum_udf = udf(max_harmonic_sum)
+    scaledHarmonic_udf = udf(scaledHarmonic)
+    ### window function to take maximum of all harmonic sum
+    window = Window.orderBy()
+
+    scoreAggregation = (
+        mousePhenotypes.select(
+            "targetFromSourceId",
+            F.explode_outer(F.col("modelPhenotypeClasses.id")).alias("id"),
+        )
+        .join(
+            mousePhenoScoreFilter, F.col("id") == mousePhenoScoreFilter.idLabel, "left"
+        )
+        .withColumn("score", F.col("score").cast("float"))
+        .groupBy("targetFromSourceId")
+        .agg(array_to_vector(F.collect_list("score")).alias("score"))
+        .withColumn("harmonic_sum", harmonic_sum_udf("score").cast("float"))
+        .withColumn("maxHarmonicSum", max_harmonic_sum_udf("score").cast("float"))
+        .withColumn("maximum", F.max("maxHarmonicSum").over(window).cast("float"))
+        .withColumn("scaledHarmonicSum", -scaledHarmonic_udf("harmonic_sum", "maximum"))
+    )
+    mousePhenoScore = scoreAggregation.select(
+        "targetFromSourceId", "scaledHarmonicSum"
+    ).join(queryset, queryset.targetid == F.col("targetFromSourceId"), "right")
+
+    return mousePhenoScore
